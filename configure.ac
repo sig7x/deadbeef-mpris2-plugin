@@ -2,7 +2,8 @@ dnl Process this file with autoconf to produce a configure script.
 
 m4_define([plugin_version_major], [1])
 m4_define([plugin_version_minor], [14])
-m4_define([plugin_version], [plugin_version_major.plugin_version_minor])
+m4_define([plugin_version_patch], [1])
+m4_define([plugin_version], [plugin_version_major.plugin_version_minor.plugin_version_patch])
 
 AC_PREREQ([2.69])
 AC_INIT([deadbeef-mpris2-plugin], [plugin_version], [peterlamby@web.de], [DeaDBeeF MPRIS2 Plugin], [https://github.com/Serranya/deadbeef-mpris2-plugin])

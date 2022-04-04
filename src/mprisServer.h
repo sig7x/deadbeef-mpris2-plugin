@@ -4,10 +4,11 @@
 #include <gio/gio.h>
 #include <gio/gdesktopappinfo.h>
 
-#define DDB_API_LEVEL 9
+#define DDB_API_LEVEL 15
 #define DDB_WARN_DEPRECATED 1
 #include <deadbeef/deadbeef.h>
 #include "artwork.h"
+#include <linux/limits.h>
 
 #define SETTING_PREVIOUS_ACTION "mpris2.previous_action"
 #define PREVIOUS_ACTION_PREVIOUS 0
@@ -15,9 +16,14 @@
 
 struct MprisData {
 	DB_functions_t *deadbeef;
-	DB_artwork_plugin_t *artwork;
+	ddb_artwork_plugin_t *artwork;
 	DB_plugin_action_t *prevOrRestart;
 	GDBusNodeInfo *gdbusNodeInfo;
+	int64_t source_id;
+	char trackURI[PATH_MAX];
+	char artworkPath[PATH_MAX];
+	char defaultPath[PATH_MAX];
+	unsigned char status;
 	int previousAction;
 };
 

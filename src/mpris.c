@@ -38,11 +38,16 @@ static int onConnect() {
 	mprisData.artwork = NULL;
 	mprisData.prevOrRestart = NULL;
 
-	DB_artwork_plugin_t *artworkPlugin = (DB_artwork_plugin_t *)mprisData.deadbeef->plug_get_for_id ("artwork");
+	ddb_artwork_plugin_t *artworkPlugin = (ddb_artwork_plugin_t *)mprisData.deadbeef->plug_get_for_id ("artwork2");
 
 	if (artworkPlugin != NULL) {
 		debug("artwork plugin detected... album art support enabled");
 		mprisData.artwork = artworkPlugin;
+		mprisData.artwork->default_image_path(mprisData.defaultPath, sizeof(mprisData.defaultPath));
+		debug("Default artwork set: %s", mprisData.defaultPath);
+		mprisData.source_id = mprisData.artwork->allocate_source_id();
+		mprisData.trackURI[0] = '\0';
+		mprisData.status = 0;
 	} else {
 		debug("artwork plugin not detected... album art support disabled");
 	}

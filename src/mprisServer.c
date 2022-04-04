@@ -164,16 +164,33 @@ static void freeTfBytecode(DB_functions_t *deadbeef) {
 	}
 }
 
-static void coverartCallback(const char *fname, const char *artist, const char *album, void *userData) {
-	if (fname != NULL) { // cover was not ready
-		debug("Async loaded cover for %s", album);
-		emitMetadataChanged(-1, userData);
+static void _cover_loaded_callback (int error, ddb_cover_query_t *query, ddb_cover_info_t *cover) {
+	struct MprisData *userData = (struct MprisData *)query->user_data;
+	debug("[AW] Callback hit for: %s", userData->trackURI);
+
+	query->user_data = NULL;
+	free(query);
+	query = NULL;
+
+	debug("[AW] Status is COMPLETED");
+	userData->status = 2;
+
+	strcpy(userData->artworkPath,userData->defaultPath);
+
+	if (cover != NULL) {
+		if (cover->cover_found == 1) {
+			debug("[AW] Async cover successfully found");
+			strcpy(userData->artworkPath, cover->image_filename);
+		}
+		userData->artwork->cover_info_release(cover);
 	}
+
+	emitMetadataChanged(-1, userData);
 }
 
 GVariant* getMetadataForTrack(int track_id, struct MprisData *mprisData) {
 	int id;
-	DB_playItem_t *track = NULL;
+	ddb_playItem_t *track = NULL;
 	DB_functions_t *deadbeef = mprisData->deadbeef;
 	ddb_playlist_t *pl = NULL;
 	GVariant *tmp;
@@ -194,9 +211,6 @@ GVariant* getMetadataForTrack(int track_id, struct MprisData *mprisData) {
 		char buf[500];
 		int buf_size = sizeof(buf);
 		int64_t duration = deadbeef->pl_get_item_duration(track) * 1000000;
-		const char *album = deadbeef->pl_find_meta(track, "album");
-		const char *artist = deadbeef->pl_find_meta(track, "artist");
-		const char *uri = deadbeef->pl_find_meta(track, ":URI");
 
 		deadbeef->pl_lock();
 
@@ -210,34 +224,51 @@ GVariant* getMetadataForTrack(int track_id, struct MprisData *mprisData) {
 		}
 
 		if (mprisData->artwork != NULL) {
-			char *artworkPath = NULL;
+			debug("[AW] Entering artwork metadata block, status is: %d", mprisData->status);
 			char *albumArtUri = NULL;
 
-			debug("getting cover for album %s", album);
-			artworkPath = mprisData->artwork->get_album_art(uri, artist, album, -1, coverartCallback, mprisData);
-			if (artworkPath == NULL) {
-				debug("cover for %s not ready. Using default artwork", album);
-				const char *defaultPath = mprisData->artwork->get_default_cover();
-				if (defaultPath != NULL) {
-					albumArtUri = malloc(strlen(defaultPath) + 7 + 1); // strlen(defaultPath) + strlen("file://") + "/0"
+			const char *uri = deadbeef->pl_find_meta(track, ":URI");
 
-					strcpy(albumArtUri, "file://");
-					strcpy(albumArtUri + 7, defaultPath);
+			debug("[AW] Comparing URI | %s :: %s", mprisData->trackURI, uri);
+			if (strcmp(mprisData->trackURI, uri) != 0) {
+				debug("[AW] URI is different");
+				if (mprisData->status == 1) {
+					debug("[AW] Cancelling pending queries");
+					mprisData->artwork->cancel_queries_with_source_id(mprisData->source_id);
 				}
-			} else {
-				debug("cover for %s ready. Artwork is: %s", album, artworkPath);
-				albumArtUri = malloc(strlen(artworkPath) + 7 + 1); // strlen(artworkPath) + strlen("file://") + "/0"
-
-				strcpy(albumArtUri, "file://");
-				strcpy(albumArtUri + 7, artworkPath);
-
-				free(artworkPath);
+				debug("[AW] Status is set to NEW");
+				mprisData->status = 0;
+				strcpy(mprisData->trackURI, uri);
+				debug("[AW] Artwork path is default");
+				strcpy(mprisData->artworkPath, mprisData->defaultPath);
 			}
 
-			if (albumArtUri != NULL) {
-				g_variant_builder_add(builder, "{sv}", "mpris:artUrl", g_variant_new("s", albumArtUri));
-				free(albumArtUri);
+			if (mprisData->status == 0) {
+				debug("[AW] Querying cover for: %s", uri);
+				ddb_cover_query_t *query = (ddb_cover_query_t *)calloc(1, sizeof(ddb_cover_query_t));
+
+				query->_size = sizeof(ddb_cover_query_t);
+				query->track = track;
+				query->source_id = mprisData->source_id;
+				query->user_data = (void *)mprisData;
+
+				mprisData->status = 1;
+				debug("[AW] Status is PENDING");
+				mprisData->artwork->cover_get(query, _cover_loaded_callback);
 			}
+
+			albumArtUri = (char *)malloc(strlen(mprisData->artworkPath) + 7 + 1);
+
+			strcpy(albumArtUri, "file://");
+			strcpy(albumArtUri + 7, mprisData->artworkPath);
+
+			debug("[AW] (%d) Using art %s for %s", mprisData->status, albumArtUri, uri);
+
+			g_variant_builder_add(builder, "{sv}", "mpris:artUrl", g_variant_new("s", albumArtUri));
+
+			free(albumArtUri);
+			albumArtUri = NULL;
+			debug("[AW] Exiting artwork metadata block");
 		}
 
 		// init on first access
