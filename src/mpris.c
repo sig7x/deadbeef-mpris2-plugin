@@ -6,12 +6,10 @@
 static GThread *mprisThread;
 static struct MprisData mprisData;
 
-static int oldLoopStatus = -1;
-static int oldShuffleStatus = -1;
+static ddb_repeat_t oldRepeatStatus = DDB_REPEAT_OFF;
+static ddb_shuffle_t oldShuffleStatus = DDB_SHUFFLE_OFF;
 
 static int onStart() {
-	oldLoopStatus = mprisData.deadbeef->conf_get_int("playback.loop", 0);
-	oldShuffleStatus = mprisData.deadbeef->conf_get_int("playback.order", PLAYBACK_ORDER_LINEAR);
 	mprisData.previousAction = mprisData.deadbeef->conf_get_int(SETTING_PREVIOUS_ACTION, PREVIOUS_ACTION_PREV_OR_RESTART);
 
 #if (GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION < 32)
@@ -107,15 +105,15 @@ static int handleEvent (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 		case DB_EV_SONGSTARTED:
 			debug("DB_EV_SONGSTARTED event received");
 			emitMetadataChanged(-1, &mprisData);
-			emitPlaybackStatusChanged(OUTPUT_STATE_PLAYING, &mprisData);
+			emitPlaybackStatusChanged(DDB_PLAYBACK_STATE_PLAYING, &mprisData);
 			break;
 		case DB_EV_PAUSED:
 			debug("DB_EV_PAUSED event received");
-			emitPlaybackStatusChanged(p1 ? OUTPUT_STATE_PAUSED : OUTPUT_STATE_PLAYING, &mprisData);
+			emitPlaybackStatusChanged(p1 ? DDB_PLAYBACK_STATE_PAUSED : DDB_PLAYBACK_STATE_PLAYING, &mprisData);
 			break;
 		case DB_EV_STOP:
 			debug("DB_EV_STOP event received");
-			emitPlaybackStatusChanged(OUTPUT_STATE_STOPPED, &mprisData);
+			emitPlaybackStatusChanged(DDB_PLAYBACK_STATE_STOPPED, &mprisData);
 			break;
 		case DB_EV_VOLUMECHANGED:
 			debug("DB_EV_VOLUMECHANGED event received");
@@ -123,20 +121,19 @@ static int handleEvent (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 			break;
 		case DB_EV_CONFIGCHANGED:
 			debug("DB_EV_CONFIGCHANGED event received");
-			if (oldShuffleStatus != -1) {
-				int newLoopStatus = mprisData.deadbeef->conf_get_int("playback.loop", PLAYBACK_MODE_LOOP_ALL);
-				int newShuffleStatus = mprisData.deadbeef->conf_get_int("playback.order", PLAYBACK_ORDER_LINEAR);
+			ddb_repeat_t newRepeatStatus = mprisData.deadbeef->streamer_get_repeat();
+			ddb_shuffle_t newShuffleStatus = mprisData.deadbeef->streamer_get_shuffle();
 
-				if (newLoopStatus != oldLoopStatus) {
-					debug("LoopStatus changed %d", newLoopStatus);
-					emitLoopStatusChanged(oldLoopStatus = newLoopStatus);
-				} if (newShuffleStatus != oldShuffleStatus) {
-					debug("ShuffleStatus changed %d", newShuffleStatus);
-					emitShuffleStatusChanged(oldShuffleStatus = newShuffleStatus);
-				}
-
-				mprisData.previousAction = mprisData.deadbeef->conf_get_int(SETTING_PREVIOUS_ACTION, PREVIOUS_ACTION_PREV_OR_RESTART);
+			if (newRepeatStatus != oldRepeatStatus) {
+				debug("LoopStatus changed %d", newRepeatStatus);
+				emitLoopStatusChanged(oldRepeatStatus = newRepeatStatus);
 			}
+			if (newShuffleStatus != oldShuffleStatus) {
+				debug("ShuffleStatus changed %d", newShuffleStatus);
+				emitShuffleStatusChanged(oldShuffleStatus = newShuffleStatus);
+			}
+
+			mprisData.previousAction = mprisData.deadbeef->conf_get_int(SETTING_PREVIOUS_ACTION, PREVIOUS_ACTION_PREV_OR_RESTART);
 			break;
 		default:
 			break;

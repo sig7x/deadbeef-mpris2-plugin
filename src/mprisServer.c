@@ -475,7 +475,7 @@ static void onPlayerMethodCallHandler(GDBusConnection *connection, const char *s
 	} else if (strcmp(methodName, "PlayPause") == 0) {
 		g_dbus_method_invocation_return_value(invocation, NULL);
 
-		if (deadbeef->get_output()->state() == OUTPUT_STATE_PLAYING) {
+		if (deadbeef->get_output()->state() == DDB_PLAYBACK_STATE_PLAYING) {
 			deadbeef->sendmessage(DB_EV_PAUSE, 0, 0, 0);
 		} else {
 			deadbeef->sendmessage(DB_EV_PLAY_CURRENT, 0, 0, 0);
@@ -485,7 +485,7 @@ static void onPlayerMethodCallHandler(GDBusConnection *connection, const char *s
 		g_dbus_method_invocation_return_value(invocation, NULL);
 		deadbeef->sendmessage(DB_EV_STOP, 0, 0, 0);
 	} else if (strcmp(methodName, "Play") == 0) {
-		if (deadbeef->get_output()->state() != OUTPUT_STATE_PLAYING)
+		if (deadbeef->get_output()->state() != DDB_PLAYBACK_STATE_PLAYING)
 			deadbeef->sendmessage(DB_EV_PLAY_CURRENT, 0, 0, 0);
 		g_dbus_method_invocation_return_value(invocation, NULL);
 	} else if (strcmp(methodName, "Seek") == 0) {
@@ -568,13 +568,13 @@ static GVariant* onPlayerGetPropertyHandler(GDBusConnection *connection, const c
 
 		if (output != NULL) {
 			switch (output->state()) {
-			case OUTPUT_STATE_PLAYING:
+			case DDB_PLAYBACK_STATE_PLAYING:
 				result = g_variant_new_string("Playing");
 				break;
-			case OUTPUT_STATE_PAUSED:
+			case DDB_PLAYBACK_STATE_PAUSED:
 				result = g_variant_new_string("Paused");
 				break;
-			case OUTPUT_STATE_STOPPED:
+			case DDB_PLAYBACK_STATE_STOPPED:
 			default:
 				result = g_variant_new_string("Stopped");
 				break;
@@ -583,16 +583,16 @@ static GVariant* onPlayerGetPropertyHandler(GDBusConnection *connection, const c
 			result = g_variant_new_string("Stopped");
 		}
 	} else if (strcmp(propertyName, "LoopStatus") == 0) {
-		int loop = deadbeef->conf_get_int("playback.loop", PLAYBACK_MODE_LOOP_ALL);
+		ddb_repeat_t repeat = deadbeef->streamer_get_repeat();
 
-		switch (loop) {
-		case PLAYBACK_MODE_NOLOOP:
+		switch (repeat) {
+		case DDB_REPEAT_OFF:
 			result = g_variant_new_string("None");
 			break;
-		case PLAYBACK_MODE_LOOP_ALL:
+		case DDB_REPEAT_ALL:
 			result = g_variant_new_string("Playlist");
 			break;
-		case PLAYBACK_MODE_LOOP_SINGLE:
+		case DDB_REPEAT_SINGLE:
 			result = g_variant_new_string("Track");
 			break;
 		default:
@@ -604,7 +604,7 @@ static GVariant* onPlayerGetPropertyHandler(GDBusConnection *connection, const c
 			|| strcmp(propertyName, "MinimumRate") == 0) {
 		result = g_variant_new("d", 1.0);
 	} else if (strcmp(propertyName, "Shuffle") == 0) {
-		if (deadbeef->conf_get_int("playback.order", PLAYBACK_ORDER_LINEAR) == PLAYBACK_ORDER_LINEAR) {
+		if (deadbeef->streamer_get_shuffle() == DDB_SHUFFLE_OFF) {
 			result = g_variant_new_boolean(FALSE);
 		} else {
 			result = g_variant_new_boolean(TRUE);
@@ -654,11 +654,11 @@ static int onPlayerSetPropertyHandler(GDBusConnection *connection, const char *s
 		if (status != NULL) {
 			debug("status is %s", status);
 			if (strcmp(status, "None") == 0) {
-				deadbeef->conf_set_int("playback.loop", PLAYBACK_MODE_NOLOOP);
+				deadbeef->streamer_set_repeat(DDB_REPEAT_OFF);
 			} else if (strcmp(status, "Playlist") == 0) {
-				deadbeef->conf_set_int("playback.loop", PLAYBACK_MODE_LOOP_ALL);
+				deadbeef->streamer_set_repeat(DDB_REPEAT_ALL);
 			} else if (strcmp(status, "Track") == 0) {
-				deadbeef->conf_set_int("playback.loop", PLAYBACK_MODE_LOOP_SINGLE);
+				deadbeef->streamer_set_repeat(DDB_REPEAT_SINGLE);
 			}
 
 			deadbeef->sendmessage(DB_EV_CONFIGCHANGED, 0, 0, 0);
@@ -667,9 +667,9 @@ static int onPlayerSetPropertyHandler(GDBusConnection *connection, const char *s
 		debug("Setting the rate is not supported");
 	} else if (strcmp(propertyName, "Shuffle") == 0) {
 		if (g_variant_get_boolean(value)) {
-			deadbeef->conf_set_int("playback.order", PLAYBACK_ORDER_RANDOM);
+			deadbeef->streamer_set_shuffle(DDB_SHUFFLE_RANDOM);
 		} else {
-			deadbeef->conf_set_int("playback.order", PLAYBACK_ORDER_LINEAR);
+			deadbeef->streamer_set_shuffle(DDB_SHUFFLE_OFF);
 		}
 		deadbeef->sendmessage(DB_EV_CONFIGCHANGED, 0, 0, 0);
 	} else if (strcmp(propertyName, "Volume") == 0) {
@@ -758,18 +758,18 @@ void emitCanGoChanged(struct MprisData *userData) {
 	g_variant_builder_unref(builder);
 }
 
-void emitPlaybackStatusChanged(int status, struct MprisData *userData) {
+void emitPlaybackStatusChanged(ddb_playback_state_t status, struct MprisData *userData) {
 	GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
 	DB_functions_t *deadbeef = ((struct MprisData *)userData)->deadbeef;
 
 	switch (status) {
-		case OUTPUT_STATE_PLAYING:
+		case DDB_PLAYBACK_STATE_PLAYING:
 			g_variant_builder_add(builder, "{sv}", "PlaybackStatus", g_variant_new_string("Playing"));
 			break;
-		case OUTPUT_STATE_PAUSED:
+		case DDB_PLAYBACK_STATE_PAUSED:
 			g_variant_builder_add(builder, "{sv}", "PlaybackStatus", g_variant_new_string("Paused"));
 			break;
-		case OUTPUT_STATE_STOPPED:
+		case DDB_PLAYBACK_STATE_STOPPED:
 		default:
 			g_variant_builder_add(builder, "{sv}", "PlaybackStatus", g_variant_new_string("Stopped"));
 			break;
@@ -790,17 +790,17 @@ void emitPlaybackStatusChanged(int status, struct MprisData *userData) {
 	g_variant_builder_unref(builder);
 }
 
-void emitLoopStatusChanged(int status) {
+void emitLoopStatusChanged(ddb_repeat_t status) {
 	GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
 
 	switch (status) {
-	case PLAYBACK_MODE_NOLOOP:
+	case DDB_REPEAT_OFF:
 		g_variant_builder_add(builder, "{sv}", "LoopStatus", g_variant_new_string("None"));
 		break;
-	case PLAYBACK_MODE_LOOP_ALL:
+	case DDB_REPEAT_ALL:
 		g_variant_builder_add(builder, "{sv}", "LoopStatus", g_variant_new_string("Playlist"));
 		break;
-	case PLAYBACK_MODE_LOOP_SINGLE:
+	case DDB_REPEAT_SINGLE:
 		g_variant_builder_add(builder, "{sv}", "LoopStatus", g_variant_new_string("Track"));
 		break;
 	default:
@@ -819,10 +819,10 @@ void emitLoopStatusChanged(int status) {
 	g_variant_builder_unref(builder);
 }
 
-void emitShuffleStatusChanged(int status) {
+void emitShuffleStatusChanged(ddb_shuffle_t status) {
 	GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
 
-	g_variant_builder_add(builder, "{sv}", "Shuffle", g_variant_new_boolean(status != PLAYBACK_ORDER_LINEAR));
+	g_variant_builder_add(builder, "{sv}", "Shuffle", g_variant_new_boolean(status != DDB_SHUFFLE_OFF));
 	GVariant *signal[] = {
 		g_variant_new_string(PLAYER_INTERFACE),
 		g_variant_builder_end(builder),

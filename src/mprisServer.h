@@ -33,9 +33,9 @@ void stopServer(void);
 void emitVolumeChanged(float);
 void emitSeeked(float);
 void emitMetadataChanged(int, struct MprisData*);
-void emitPlaybackStatusChanged(int, struct MprisData*);
-void emitLoopStatusChanged(int);
-void emitShuffleStatusChanged(int);
+void emitPlaybackStatusChanged(ddb_playback_state_t, struct MprisData*);
+void emitLoopStatusChanged(ddb_repeat_t);
+void emitShuffleStatusChanged(ddb_shuffle_t);
 void emitCanGoChanged(struct MprisData *);
 
 #endif
